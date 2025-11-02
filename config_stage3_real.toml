@@ -1,0 +1,8 @@
+package_name = "requests"
+repository_url = "https://pypi.org/simple/"
+test_mode = false
+test_repository_path = ""
+ascii_tree = true
+max_depth = 2
+filter_substring = ""
+show_reverse_deps = false

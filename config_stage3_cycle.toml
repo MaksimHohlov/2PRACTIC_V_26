@@ -1,0 +1,8 @@
+package_name = "J"
+repository_url = "https://pypi.org/simple/"
+test_mode = true
+test_repository_path = "test_repo.txt"
+ascii_tree = true
+max_depth = 10
+filter_substring = ""
+show_reverse_deps = false
