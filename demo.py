@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Demo script for Dependency Visualizer - Stage 3
+Demo script for Dependency Visualizer - Stage 4
 """
 
 import subprocess
@@ -8,34 +8,17 @@ import sys
 import os
 
 def run_demo():
-    print("=== Dependency Visualizer Demo - Stage 3 ===\n")
+    print("=== Dependency Visualizer Demo - Stage 4 ===\n")
     
     if not os.path.exists("dependency_visualizer.py"):
         print("ERROR: dependency_visualizer.py not found!")
         return
     
-    # Создаем тестовый репозиторий
-    with open("test_repo.txt", "w") as f:
-        f.write("""A: B, C
-B: D, E
-C: F
-D: G
-E: G, H
-F: H
-G: I
-H: I
-I:
-J: K, L
-K: J
-L: M
-M:
-""")
-    
     tests = [
-        ("1. Test mode with file repository", "config_stage3_test.toml"),
-        ("2. With package filtering", "config_stage3_filter.toml"),
-        ("3. Cyclic dependencies", "config_stage3_cycle.toml"),
-        ("4. Real mode (limited depth)", "config_stage3_real.toml")
+        ("1. Reverse dependencies for G", "config_stage4_reverse.toml"),
+        ("2. Leaf package (no reverse deps)", "config_stage4_leaf.toml"),
+        ("3. Reverse deps with cycles", "config_stage4_cycle_reverse.toml"),
+        ("4. Standard tree without reverse deps", "config_stage3_test.toml")
     ]
     
     for test_name, config_file in tests:

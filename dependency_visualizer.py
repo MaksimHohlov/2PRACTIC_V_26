@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Dependency Graph Visualizer Tool
-Stage 3: Graph Operations
+Stage 4: Additional Operations
 """
 
 import tomllib
@@ -9,14 +9,10 @@ import sys
 import urllib.request
 import json
 import re
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Set, Tuple
 from collections import deque
-
-# Fix encoding for Windows
-if sys.platform == "win32":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 
 class ConfigError(Exception):
@@ -27,7 +23,11 @@ class DependencyVisualizer:
     def __init__(self):
         self.config: Dict[str, Any] = {}
         self.dependency_graph: Dict[str, List[str]] = {}
+        self.reverse_dependency_graph: Dict[str, List[str]] = {}
         self.visited: Set[str] = set()
+        self.dependency_cache: Dict[str, List[str]] = {}
+        self.request_count = 0
+        self.full_dependency_graph: Dict[str, List[str]] = {}
         
     def load_config(self, config_path: str) -> None:
         """Load configuration from TOML file"""
@@ -57,12 +57,25 @@ class DependencyVisualizer:
             raise ConfigError("Parameter 'package_name' must be non-empty string")
     
     def get_dependencies_from_pypi(self, package_name: str) -> List[str]:
-        """Get direct dependencies from PyPI"""
+        """Get direct dependencies from PyPI with caching and rate limiting"""
+        if package_name in self.dependency_cache:
+            return self.dependency_cache[package_name]
+        
+        if self.request_count >= 10:
+            print(f"  Rate limit reached, skipping {package_name}")
+            return []
+        
         try:
+            self.request_count += 1
             print(f"Fetching dependencies for '{package_name}' from PyPI...")
             
+            time.sleep(0.5)
+            
             url = f"https://pypi.org/pypi/{package_name}/json"
-            req = urllib.request.Request(url, headers={'User-Agent': 'DependencyVisualizer/1.0'})
+            req = urllib.request.Request(
+                url, 
+                headers={'User-Agent': 'DependencyVisualizer/1.0'}
+            )
             
             with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read().decode('utf-8'))
@@ -82,10 +95,20 @@ class DependencyVisualizer:
                                     dependencies.append(dep_name)
                         print(f"After cleaning: {len(dependencies)} unique dependencies")
                 
+                self.dependency_cache[package_name] = dependencies
                 return dependencies
                 
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                print(f"  Package '{package_name}' not found on PyPI")
+            else:
+                print(f"  HTTP error for '{package_name}': {e}")
+            self.dependency_cache[package_name] = []
+            return []
         except Exception as e:
-            raise ConfigError(f"Error fetching dependencies: {e}")
+            print(f"  Error fetching '{package_name}': {e}")
+            self.dependency_cache[package_name] = []
+            return []
     
     def get_test_dependencies(self, package_name: str) -> List[str]:
         """Get test dependencies for demonstration"""
@@ -100,7 +123,7 @@ class DependencyVisualizer:
             'H': ['I'],
             'I': [],
             'J': ['K', 'L'],
-            'K': ['J'],  # Циклическая зависимость
+            'K': ['J'],
             'L': ['M'],
             'M': []
         }
@@ -136,7 +159,10 @@ class DependencyVisualizer:
         
         print(f"\nBuilding dependency graph for '{start_package}' (max depth: {max_depth})...")
         
-        # Stack for DFS: (package_name, current_depth)
+        self.dependency_cache = {}
+        self.request_count = 0
+        self.full_dependency_graph = {}
+        
         stack = [(start_package, 0)]
         self.dependency_graph = {}
         self.visited = set()
@@ -145,45 +171,73 @@ class DependencyVisualizer:
         while stack:
             current_package, depth = stack.pop()
             
-            # Skip if beyond max depth
             if depth > max_depth:
                 continue
             
-            # Skip if already visited at this depth or shallower
             if current_package in self.visited:
-                # Check for cycles
                 if current_package in [p for p, _ in stack]:
                     cycles_detected.append(current_package)
                 continue
             
             self.visited.add(current_package)
             
-            # Skip if filtered
             if self.should_filter_package(current_package):
                 print(f"  Filtered out: {current_package}")
                 continue
             
-            # Get dependencies based on mode
             if self.get_config_value('test_mode') and self.get_config_value('test_repository_path'):
-                # Test repository mode
                 test_graph = self.load_test_repository(self.get_config_value('test_repository_path'))
                 dependencies = test_graph.get(current_package, [])
             elif self.get_config_value('test_mode'):
-                # Mock data mode
                 dependencies = self.get_test_dependencies(current_package)
             else:
-                # Real PyPI mode
                 dependencies = self.get_dependencies_from_pypi(current_package)
             
+            self.full_dependency_graph[current_package] = dependencies
             self.dependency_graph[current_package] = dependencies
             
-            # Add dependencies to stack for further processing
-            for dep in reversed(dependencies):  # reversed to maintain order
+            for dep in reversed(dependencies):
                 if not self.should_filter_package(dep):
                     stack.append((dep, depth + 1))
         
         if cycles_detected:
-            print(f"⚠️  Detected potential cycles: {list(set(cycles_detected))}")
+            print(f"Warning: Detected potential cycles: {list(set(cycles_detected))}")
+        
+        self.build_reverse_dependency_graph()
+    
+    def build_reverse_dependency_graph(self) -> None:
+        """Build reverse dependency graph from full dependency graph"""
+        self.reverse_dependency_graph = {}
+        
+        for package, dependencies in self.full_dependency_graph.items():
+            for dep in dependencies:
+                if dep not in self.reverse_dependency_graph:
+                    self.reverse_dependency_graph[dep] = []
+                if package not in self.reverse_dependency_graph[dep]:
+                    self.reverse_dependency_graph[dep].append(package)
+    
+    def find_reverse_dependencies(self, target_package: str) -> List[str]:
+        """Find all packages that depend on the target package"""
+        if target_package not in self.reverse_dependency_graph:
+            return []
+        
+        reverse_deps = set()
+        queue = deque([target_package])
+        visited = set()
+        
+        while queue:
+            current = queue.popleft()
+            if current in visited:
+                continue
+            visited.add(current)
+            
+            if current in self.reverse_dependency_graph:
+                for dependent in self.reverse_dependency_graph[current]:
+                    if dependent not in visited and dependent not in reverse_deps:
+                        reverse_deps.add(dependent)
+                        queue.append(dependent)
+        
+        return sorted(list(reverse_deps))
     
     def display_dependency_tree(self) -> None:
         """Display dependency tree in simple ASCII format"""
@@ -208,6 +262,39 @@ class DependencyVisualizer:
                         print_tree(dep, depth + 1)
         
         print_tree(start_package)
+    
+    def display_reverse_dependencies(self) -> None:
+        """Display reverse dependencies for the target package"""
+        if not self.get_config_value('show_reverse_deps'):
+            return
+            
+        target_package = self.get_config_value('package_name')
+        reverse_deps = self.find_reverse_dependencies(target_package)
+        
+        print(f"\n=== Reverse Dependencies for '{target_package}' ===")
+        
+        if reverse_deps:
+            print(f"Packages that depend on '{target_package}':")
+            for i, dep in enumerate(reverse_deps, 1):
+                print(f"  {i}. {dep}")
+            print(f"\nTotal: {len(reverse_deps)} reverse dependencies")
+        else:
+            print(f"No packages depend on '{target_package}'")
+    
+    def display_all_reverse_dependencies(self) -> None:
+        """Display reverse dependencies for all packages in the graph"""
+        if not self.get_config_value('show_reverse_deps'):
+            return
+            
+        print(f"\n=== All Reverse Dependencies ===")
+        
+        all_packages = sorted(self.full_dependency_graph.keys())
+        for package in all_packages:
+            reverse_deps = self.find_reverse_dependencies(package)
+            if reverse_deps:
+                print(f"\n{package}:")
+                for dep in reverse_deps:
+                    print(f"  - {dep}")
     
     def get_config_value(self, key: str) -> Any:
         return self.config.get(key)
@@ -234,20 +321,27 @@ class DependencyVisualizer:
         print("=" * 50)
     
     def analyze_dependencies(self) -> None:
-        """Main analysis method for Stage 3"""
+        """Main analysis method for Stage 4"""
         self.build_dependency_graph()
         
         if self.get_config_value('ascii_tree'):
             self.display_dependency_tree()
         
-        # Display statistics
+        self.display_reverse_dependencies()
+        
+        if self.get_config_value('show_reverse_deps') and self.get_config_value('test_mode'):
+            self.display_all_reverse_dependencies()
+        
         total_packages = len(self.dependency_graph)
         if total_packages > 0:
             total_dependencies = sum(len(deps) for deps in self.dependency_graph.values())
-            print(f"\n📊 Graph Statistics:")
+            print(f"\nGraph Statistics:")
             print(f"   Total packages: {total_packages}")
             print(f"   Total dependencies: {total_dependencies}")
             print(f"   Max depth reached: {self.get_config_value('max_depth')}")
+            
+            if not self.get_config_value('test_mode'):
+                print(f"   PyPI requests made: {self.request_count}")
 
 
 def main():
@@ -267,10 +361,10 @@ def main():
         print("\n" + "="*50)
         visualizer.display_config()
         
-        print("\n=== Stage 3: Dependency Graph Analysis ===")
+        print("\n=== Stage 4: Advanced Dependency Analysis ===")
         visualizer.analyze_dependencies()
         
-        print("\n✅ Stage 3 completed successfully!")
+        print("\nSUCCESS: Stage 4 completed successfully!")
         
     except ConfigError as e:
         print(f"ERROR: {e}")
