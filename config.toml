@@ -1,0 +1,25 @@
+# Конфигурация инструмента визуализации зависимостей
+
+# Имя анализируемого пакета
+package_name = "requests"
+
+# URL репозитория пакетов
+repository_url = "https://pypi.org/simple/"
+
+# Режим работы с тестовым репозиторием (true/false)
+test_mode = false
+
+# Путь к файлу тестового репозитория (используется только в test_mode)
+test_repository_path = ""
+
+# Режим вывода зависимостей в формате ASCII-дерева (true/false)
+ascii_tree = true
+
+# Максимальная глубина анализа зависимостей
+max_depth = 3
+
+# Подстрока для фильтрации пакетов
+filter_substring = ""
+
+# Показать обратные зависимости (true/false)
+show_reverse_deps = false
