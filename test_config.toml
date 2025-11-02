@@ -1,6 +1,6 @@
-# Тестовый конфигурационный файл с ошибками
-
-package_name = ""  # Ошибка: пустое имя пакета
-repository_url = 123  # Ошибка: не строка
-test_mode = "yes"  # Ошибка: не булево значение
-max_depth = -1  # Ошибка: отрицательная глубина
+package_name = ""
+repository_url = 123
+test_mode = "yes"
+max_depth = -1
+filter_substring = 456
+ascii_tree = "true"
