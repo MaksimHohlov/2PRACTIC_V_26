@@ -1,0 +1,53 @@
+digraph DependencyGraph {
+    rankdir=TB;
+    node [shape=box, style=filled, fillcolor=lightblue, fontname=Arial];
+    edge [color=darkgreen, arrowhead=vee];
+    
+    // Основной граф зависимостей из тестового репозитория
+    A -> B;
+    A -> C;
+    B -> D;
+    B -> E;
+    C -> F;
+    D -> G;
+    E -> G;
+    E -> H;
+    F -> H;
+    G -> I;
+    H -> I;
+    
+    // Циклические зависимости
+    J -> K;
+    J -> L;
+    K -> J;  
+    L -> M;
+    
+    node [fillcolor=lightcoral]; // Корневые пакеты
+    A; J;
+    
+    node [fillcolor=lightgreen]; // Промежуточные пакеты
+    B; C; D; E; F; G; H; K; L;
+    
+    node [fillcolor=lightyellow]; // Конечные пакеты 
+    I; M;
+    
+    subgraph cluster_main {
+        label = "Основной граф";
+        color = blue;
+        A; B; C; D; E; F; G; H; I;
+    }
+    
+    subgraph cluster_cycle {
+        label = "Циклические зависимости";
+        color = red;
+        J; K; L; M;
+    }
+    
+    edge [color=red, style=bold];
+    J -> K;
+    K -> J;
+    
+    // Заголовок графа
+    labelloc = "t";
+    label = "Граф зависимостей пакетов";
+}
